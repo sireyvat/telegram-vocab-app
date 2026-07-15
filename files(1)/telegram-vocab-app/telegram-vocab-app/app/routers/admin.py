@@ -1,0 +1,54 @@
+"""
+routers/admin.py
+-----------------
+Endpoints used by the TEACHER's Admin Dashboard.
+(Khmer: endpoint ទាំងនេះសម្រាប់គ្រូប្រើដើម្បីគ្រប់គ្រងមេរៀន និងពាក្យ)
+
+Security note (MVP):
+  For now we protect these routes with one shared secret key
+  (Settings.ADMIN_SECRET_KEY), sent as an "X-Admin-Key" header.
+  This is fine for a solo teacher MVP. Before giving access to other
+  teachers, replace this with real login (e.g. OAuth2 + hashed passwords).
+"""
+
+from fastapi import APIRouter, Depends, Header, HTTPException
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.config import settings
+from app import crud, schemas
+
+router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+def verify_admin(x_admin_key: str = Header(...)):
+    """A tiny "gatekeeper" dependency: every admin route requires this header."""
+    if x_admin_key != settings.ADMIN_SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+
+
+@router.post("/lessons", response_model=schemas.LessonOut, dependencies=[Depends(verify_admin)])
+def create_lesson(lesson_in: schemas.LessonCreate, db: Session = Depends(get_db)):
+    """Teacher creates a new lesson, e.g. { "title": "Unit 3: Travel" }."""
+    return crud.create_lesson(db, lesson_in)
+
+
+@router.get("/lessons", response_model=list[schemas.LessonOut], dependencies=[Depends(verify_admin)])
+def get_lessons(db: Session = Depends(get_db)):
+    """List all lessons with their words, most recent first."""
+    return crud.list_lessons(db)
+
+
+@router.post("/lessons/{lesson_id}/words", response_model=schemas.WordOut, dependencies=[Depends(verify_admin)])
+def add_word(lesson_id: int, word_in: schemas.WordCreate, db: Session = Depends(get_db)):
+    """Teacher adds one vocabulary word to an existing lesson."""
+    return crud.add_word_to_lesson(db, lesson_id, word_in)
+
+
+@router.get("/analytics/hardest-words", response_model=list[schemas.WordDifficultyOut], dependencies=[Depends(verify_admin)])
+def hardest_words(limit: int = 20, db: Session = Depends(get_db)):
+    """
+    Analytics: which words does the WHOLE CLASS get wrong most often?
+    Use this before class to decide what to re-teach.
+    """
+    return crud.get_hardest_words(db, limit=limit)

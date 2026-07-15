@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vocab Practice</title>
+<!-- Telegram Mini App SDK: gives us window.Telegram.WebApp with the
+     current user's info, theme colors, and native buttons. -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  /* Design note: an "index card" aesthetic fits a flashcard app better
+     than a generic dashboard look -- warm card stock, punch-hole notch,
+     a hand-graded red for corrections, a stamped green for "learned". */
+  :root{
+    --paper:#f6f1e4; --ink:#2b2620; --line:#cabf9e;
+    --accent:#8a5cf6; --correct:#2f7d4f; --wrong:#b2452c;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; background:var(--paper); color:var(--ink);
+    font-family:'Courier New', ui-monospace, monospace;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .app{width:100%; max-width:420px;}
+  .topbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; font-size:13px; letter-spacing:.05em; text-transform:uppercase;}
+  .badge{background:var(--ink); color:var(--paper); padding:4px 10px; border-radius:2px;}
+  .card{
+    background:#fffdf8; border:1px solid var(--line); border-radius:10px;
+    padding:32px 24px; position:relative; box-shadow:0 6px 0 var(--line);
+    min-height:220px; display:flex; flex-direction:column; justify-content:center; text-align:center;
+  }
+  .card::before{ /* punch hole, like a real index card */
+    content:""; position:absolute; top:14px; left:50%; transform:translateX(-50%);
+    width:10px; height:10px; border-radius:50%; background:var(--paper); border:1px solid var(--line);
+  }
+  .term{font-size:28px; font-weight:700; letter-spacing:.02em;}
+  .meaning{margin-top:10px; font-size:15px; color:#5a5346; display:none;}
+  .example{margin-top:14px; font-size:12px; font-style:italic; color:#7a7360;}
+  .hint{margin-top:18px; font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:#9b917a; cursor:pointer;}
+  .options{display:grid; gap:10px; margin-top:18px;}
+  .opt{
+    background:#fffdf8; border:1px solid var(--line); border-radius:6px; padding:12px 14px;
+    text-align:left; cursor:pointer; font-family:inherit; font-size:14px;
+  }
+  .opt:hover{border-color:var(--accent);}
+  .opt.correct{border-color:var(--correct); background:#eaf6ee; color:var(--correct);}
+  .opt.wrong{border-color:var(--wrong); background:#fbeae5; color:var(--wrong);}
+  .footer{display:flex; justify-content:space-between; margin-top:18px; font-size:12px; color:#7a7360;}
+  .streak{color:var(--wrong); font-weight:700;}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <span>Today's review</span>
+    <span class="badge" id="xpBadge">0 XP</span>
+  </div>
+
+  <div class="card">
+    <div class="term" id="termText">Loading…</div>
+    <div class="example" id="exampleText"></div>
+    <div class="options" id="optionsBox"></div>
+  </div>
+
+  <div class="footer">
+    <span>Streak: <span class="streak" id="streakText">0</span> days</span>
+    <span id="progressText">0 / 0</span>
+  </div>
+</div>
+
+<script>
+  // ---- CONFIG: point this at your deployed FastAPI backend ----
+  const API_BASE = "http://localhost:8000";
+
+  // Telegram gives us the logged-in user automatically. In local dev
+  // (outside Telegram) we fall back to a fake ID so you can test the UI.
+  const tg = window.Telegram?.WebApp;
+  tg?.ready();
+  const tgUser = tg?.initDataUnsafe?.user;
+  const telegramId = tgUser?.id?.toString() || "dev-test-user";
+  const firstName = tgUser?.first_name || "Student";
+
+  let session = [];
+  let current = 0;
+
+  async function login() {
+    const params = new URLSearchParams({ telegram_id: telegramId, first_name: firstName });
+    const res = await fetch(`${API_BASE}/student/login?${params}`, { method: "POST" });
+    const student = await res.json();
+    document.getElementById("xpBadge").textContent = `${student.xp} XP`;
+    document.getElementById("streakText").textContent = student.current_streak;
+  }
+
+  async function loadSession() {
+    const params = new URLSearchParams({ telegram_id: telegramId, limit: 10 });
+    const res = await fetch(`${API_BASE}/student/review-session?${params}`);
+    session = await res.json();
+    current = 0;
+    renderCard();
+  }
+
+  function renderCard() {
+    const box = document.getElementById("optionsBox");
+    box.innerHTML = "";
+    if (current >= session.length) {
+      document.getElementById("termText").textContent = "Done for today! 🎉";
+      document.getElementById("exampleText").textContent = "Come back tomorrow to keep your streak.";
+      document.getElementById("progressText").textContent = `${session.length} / ${session.length}`;
+      return;
+    }
+    const word = session[current];
+    document.getElementById("termText").textContent = word.term;
+    document.getElementById("exampleText").textContent = word.example_sentence || "";
+    document.getElementById("progressText").textContent = `${current + 1} / ${session.length}`;
+
+    word.options.forEach(opt => {
+      const btn = document.createElement("button");
+      btn.className = "opt";
+      btn.textContent = opt;
+      btn.onclick = () => selectAnswer(btn, opt, word);
+      box.appendChild(btn);
+    });
+  }
+
+  async function selectAnswer(btn, chosen, word) {
+    const isCorrect = chosen === word.meaning;
+    btn.classList.add(isCorrect ? "correct" : "wrong");
+    document.querySelectorAll(".opt").forEach(b => b.disabled = true);
+
+    const res = await fetch(`${API_BASE}/student/answer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        student_telegram_id: telegramId,
+        word_id: word.word_id,
+        question_type: "multiple_choice",
+        is_correct: isCorrect,
+      }),
+    });
+    const result = await res.json();
+    document.getElementById("xpBadge").textContent = `${result.new_xp_total} XP`;
+    document.getElementById("streakText").textContent = result.current_streak;
+
+    setTimeout(() => { current += 1; renderCard(); }, 900);
+  }
+
+  login().then(loadSession);
+</script>
+</body>
+</html>

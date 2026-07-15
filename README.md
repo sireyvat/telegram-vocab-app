@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Vocab SRS — Telegram Mini App for Vocabulary Retention
 
 A spaced-repetition + retrieval-practice tool students open inside Telegram
@@ -159,3 +160,7 @@ To try the demo frontend: just open `frontend_demo/index.html` in a browser
 | POST | `/student/answer` | Student | Submit an answer, updates SRS + XP + streak |
 
 All admin routes require header `X-Admin-Key: <your ADMIN_SECRET_KEY>`.
+=======
+# telegram-vocab-app
+A Telegram Mini App for spaced-repetition vocabulary learning
+>>>>>>> 172e6e0aaf98ba00b190527475e403e64c81dfde

@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: vocab-srs-api
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # IMPORTANT: app object lives at app/main.py (module path app.main),
+    # not a top-level main.py -- that's why the plain "uvicorn main:app"
+    # default Render guesses fails with "Exited with status 1".
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite:///./vocab_app.db
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false   # set this manually in Render's dashboard (secret)
+      - key: ADMIN_SECRET_KEY
+        sync: false   # set this manually in Render's dashboard (secret)
+      - key: JWT_SECRET
+        sync: false   # set this manually in Render's dashboard (secret)

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vocab Admin</title>
+<style>
+  :root{
+    --paper:#f6f1e4; --ink:#2b2620; --line:#cabf9e;
+    --accent:#8a5cf6; --correct:#2f7d4f; --wrong:#b2452c;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; background:var(--paper); color:var(--ink);
+    font-family:'Courier New', ui-monospace, monospace;
+    padding:24px;
+  }
+  .wrap{max-width:720px; margin:0 auto;}
+  h1{font-size:22px; margin-bottom:4px;}
+  .sub{color:#7a7360; font-size:13px; margin-bottom:24px;}
+  .card{
+    background:#fffdf8; border:1px solid var(--line); border-radius:10px;
+    padding:20px; margin-bottom:20px; box-shadow:0 4px 0 var(--line);
+  }
+  label{display:block; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:#7a7360; margin:12px 0 4px;}
+  label:first-child{margin-top:0;}
+  input, textarea{
+    width:100%; padding:10px; border:1px solid var(--line); border-radius:6px;
+    font-family:inherit; font-size:14px; background:#fffdf8; color:var(--ink);
+  }
+  textarea{resize:vertical; min-height:50px;}
+  button{
+    margin-top:16px; background:var(--ink); color:var(--paper); border:none;
+    padding:10px 18px; border-radius:6px; font-family:inherit; font-size:13px;
+    cursor:pointer; text-transform:uppercase; letter-spacing:.05em;
+  }
+  button:hover{opacity:.85;}
+  button.secondary{background:transparent; color:var(--ink); border:1px solid var(--line);}
+  .lesson{border-bottom:1px solid var(--line); padding:14px 0;}
+  .lesson:last-child{border-bottom:none;}
+  .lesson-title{font-weight:700; font-size:15px;}
+  .lesson-date{color:#9b917a; font-size:11px; margin-left:8px;}
+  .word-row{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:8px 0; font-size:13px; border-top:1px dashed var(--line);
+  }
+  .word-term{font-weight:700;}
+  .word-meaning{color:#5a5346;}
+  .msg{font-size:12px; margin-top:10px; padding:8px; border-radius:6px;}
+  .msg.ok{background:#eaf6ee; color:var(--correct);}
+  .msg.err{background:#fbeae5; color:var(--wrong);}
+  .hidden{display:none;}
+  .toggle-link{font-size:12px; color:var(--accent); cursor:pointer; text-decoration:underline; margin-top:10px; display:inline-block;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📚 Vocab Admin</h1>
+  <div class="sub">Add lessons and words — no code needed.</div>
+
+  <!-- Login card: asks for the admin key once, keeps it in the browser -->
+  <div class="card" id="loginCard">
+    <label>Admin Key</label>
+    <input type="password" id="adminKeyInput" placeholder="Paste your ADMIN_SECRET_KEY here" />
+    <button onclick="saveKey()">Unlock Dashboard</button>
+    <div class="msg err hidden" id="loginMsg"></div>
+  </div>
+
+  <!-- Main dashboard, hidden until the key is entered -->
+  <div id="dashboard" class="hidden">
+
+    <div class="card">
+      <label>New Lesson Title</label>
+      <input type="text" id="lessonTitle" placeholder="e.g. Unit 4: Technology" />
+      <button onclick="createLesson()">+ Create Lesson</button>
+      <div class="msg hidden" id="lessonMsg"></div>
+    </div>
+
+    <div class="card">
+      <label>Add Word to Lesson</label>
+      <select id="lessonSelect" style="width:100%; padding:10px; border:1px solid var(--line); border-radius:6px; font-family:inherit;"></select>
+
+      <label>Term (English word)</label>
+      <input type="text" id="wordTerm" placeholder="e.g. Technology" />
+
+      <label>Meaning (Khmer)</label>
+      <input type="text" id="wordMeaning" placeholder="e.g. បច្ចេកវិទ្យា" />
+
+      <label>Example Sentence</label>
+      <textarea id="wordExample" placeholder="A sentence using the word."></textarea>
+
+      <label>Wrong Choices for Quiz (optional, comma-separated, Khmer)</label>
+      <input type="text" id="wordDistractors" placeholder="e.g. ប្រពៃណី, អារម្មណ៍, រូបិយវត្ថុ" />
+
+      <button onclick="addWord()">+ Add Word</button>
+      <div class="msg hidden" id="wordMsg"></div>
+    </div>
+
+    <div class="card">
+      <label style="margin-bottom:12px;">Your Lessons</label>
+      <div id="lessonList">Loading…</div>
+    </div>
+
+    <div class="toggle-link" onclick="logout()">Lock dashboard / change admin key</div>
+  </div>
+</div>
+
+<script>
+  // ---- CONFIG: point this at your deployed FastAPI backend ----
+  const API_BASE = "https://telegram-vocab-app.onrender.com";
+
+  function getKey(){ return localStorage.getItem("vocab_admin_key") || ""; }
+
+  function saveKey(){
+    const key = document.getElementById("adminKeyInput").value.trim();
+    if(!key){ showMsg("loginMsg", "Please paste your admin key.", false); return; }
+    localStorage.setItem("vocab_admin_key", key);
+    unlockDashboard();
+  }
+
+  function logout(){
+    localStorage.removeItem("vocab_admin_key");
+    document.getElementById("dashboard").classList.add("hidden");
+    document.getElementById("loginCard").classList.remove("hidden");
+    document.getElementById("adminKeyInput").value = "";
+  }
+
+  function showMsg(id, text, ok){
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.classList.remove("hidden", "ok", "err");
+    el.classList.add(ok ? "ok" : "err");
+    setTimeout(() => el.classList.add("hidden"), 4000);
+  }
+
+  async function unlockDashboard(){
+    document.getElementById("loginCard").classList.add("hidden");
+    document.getElementById("dashboard").classList.remove("hidden");
+    await loadLessons();
+  }
+
+  async function apiFetch(path, options = {}) {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: { "Content-Type": "application/json", "X-Admin-Key": getKey(), ...(options.headers || {}) },
+    });
+    if (res.status === 403) {
+      showMsg("loginMsg", "Wrong admin key.", false);
+      logout();
+      throw new Error("Unauthorized");
+    }
+    return res;
+  }
+
+  async function loadLessons(){
+    const res = await apiFetch("/admin/lessons");
+    const lessons = await res.json();
+
+    const select = document.getElementById("lessonSelect");
+    select.innerHTML = lessons.map(l => `<option value="${l.id}">${l.title}</option>`).join("");
+
+    const list = document.getElementById("lessonList");
+    if (lessons.length === 0) {
+      list.innerHTML = "<div style='color:#9b917a; font-size:13px;'>No lessons yet — create one above.</div>";
+      return;
+    }
+    list.innerHTML = lessons.map(l => `
+      <div class="lesson">
+        <span class="lesson-title">${l.title}</span>
+        <span class="lesson-date">${l.lesson_date}</span>
+        ${l.words.map(w => `
+          <div class="word-row">
+            <span class="word-term">${w.term}</span>
+            <span class="word-meaning">${w.meaning}</span>
+          </div>
+        `).join("") || "<div style='color:#9b917a; font-size:12px; padding-top:6px;'>No words yet.</div>"}
+      </div>
+    `).join("");
+  }
+
+  async function createLesson(){
+    const title = document.getElementById("lessonTitle").value.trim();
+    if(!title){ showMsg("lessonMsg", "Please enter a lesson title.", false); return; }
+    try {
+      await apiFetch("/admin/lessons", { method: "POST", body: JSON.stringify({ title }) });
+      document.getElementById("lessonTitle").value = "";
+      showMsg("lessonMsg", "Lesson created!", true);
+      await loadLessons();
+    } catch(e) { /* handled in apiFetch */ }
+  }
+
+  async function addWord(){
+    const lessonId = document.getElementById("lessonSelect").value;
+    const term = document.getElementById("wordTerm").value.trim();
+    const meaning = document.getElementById("wordMeaning").value.trim();
+    const example_sentence = document.getElementById("wordExample").value.trim();
+    const distractors = document.getElementById("wordDistractors").value.trim();
+
+    if(!lessonId){ showMsg("wordMsg", "Create a lesson first.", false); return; }
+    if(!term || !meaning){ showMsg("wordMsg", "Term and meaning are required.", false); return; }
+
+    try {
+      await apiFetch(`/admin/lessons/${lessonId}/words`, {
+        method: "POST",
+        body: JSON.stringify({ term, meaning, example_sentence, distractors }),
+      });
+      document.getElementById("wordTerm").value = "";
+      document.getElementById("wordMeaning").value = "";
+      document.getElementById("wordExample").value = "";
+      document.getElementById("wordDistractors").value = "";
+      showMsg("wordMsg", "Word added!", true);
+      await loadLessons();
+    } catch(e) { /* handled in apiFetch */ }
+  }
+
+  // Auto-unlock if a key was saved from a previous visit
+  if (getKey()) { unlockDashboard(); }
+</script>
+</body>
+</html>

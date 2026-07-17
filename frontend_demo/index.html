@@ -33,7 +33,17 @@
     content:""; position:absolute; top:14px; left:50%; transform:translateX(-50%);
     width:10px; height:10px; border-radius:50%; background:var(--paper); border:1px solid var(--line);
   }
+  .term-row{display:flex; align-items:center; justify-content:center; gap:10px;}
   .term{font-size:28px; font-weight:700; letter-spacing:.02em;}
+  .speak-btn{
+    background:transparent; border:1px solid var(--line); border-radius:50%;
+    width:34px; height:34px; font-size:15px; cursor:pointer; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; padding:0;
+  }
+  .speak-btn:hover{border-color:var(--accent); background:#f6f1e4;}
+  .speak-btn:disabled{opacity:.4; cursor:default;}
+  .speak-btn.speaking{animation:pulse 1s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
   .meaning{margin-top:10px; font-size:15px; color:#5a5346; display:none;}
   .example{margin-top:14px; font-size:12px; font-style:italic; color:#7a7360;}
   .hint{margin-top:18px; font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:#9b917a; cursor:pointer;}
@@ -57,7 +67,10 @@
   </div>
 
   <div class="card">
-    <div class="term" id="termText">Loading…</div>
+    <div class="term-row">
+      <div class="term" id="termText">Loading…</div>
+      <button class="speak-btn" id="speakBtn" onclick="speakCurrentWord()" title="Listen">🔊</button>
+    </div>
     <div class="example" id="exampleText"></div>
     <div class="options" id="optionsBox"></div>
   </div>
@@ -83,6 +96,33 @@
   let session = [];
   let current = 0;
 
+  function speakCurrentWord(){
+    if (!("speechSynthesis" in window)) {
+      showTtsUnsupported();
+      return;
+    }
+    const word = session[current];
+    if (!word) return;
+
+    const textToRead = word.example_sentence ? `${word.term}. ${word.example_sentence}` : word.term;
+    const utterance = new SpeechSynthesisUtterance(textToRead);
+    utterance.lang = "en-US";
+    utterance.rate = 0.9;
+
+    const btn = document.getElementById("speakBtn");
+    utterance.onstart = () => btn.classList.add("speaking");
+    utterance.onend = () => btn.classList.remove("speaking");
+    utterance.onerror = () => btn.classList.remove("speaking");
+
+    speechSynthesis.cancel(); // stop any previous playback before starting a new one
+    speechSynthesis.speak(utterance);
+  }
+
+  function showTtsUnsupported(){
+    document.getElementById("speakBtn").disabled = true;
+    document.getElementById("speakBtn").title = "Audio not supported on this device";
+  }
+
   async function login() {
     const params = new URLSearchParams({ telegram_id: telegramId, first_name: firstName });
     const res = await fetch(`${API_BASE}/student/login?${params}`, { method: "POST" });
@@ -106,8 +146,10 @@
       document.getElementById("termText").textContent = "Done for today! 🎉";
       document.getElementById("exampleText").textContent = "Come back tomorrow to keep your streak.";
       document.getElementById("progressText").textContent = `${session.length} / ${session.length}`;
+      document.getElementById("speakBtn").disabled = true;
       return;
     }
+    document.getElementById("speakBtn").disabled = false;
     const word = session[current];
     document.getElementById("termText").textContent = word.term;
     document.getElementById("exampleText").textContent = word.example_sentence || "";

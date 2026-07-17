@@ -69,3 +69,7 @@ def generate_vocab(request: schemas.VocabGenerateRequest):
         return ai_vocab.generate_vocab_from_paragraph(request.paragraph, request.num_words)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        # Catch-all so a real API/network error (bad key, no credit, etc.)
+        # comes back as a readable message instead of a blind 500 crash.
+        raise HTTPException(status_code=502, detail=f"AI generation failed: {type(e).__name__}: {e}")

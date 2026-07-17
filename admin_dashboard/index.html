@@ -106,6 +106,26 @@
     </div>
 
     <div class="card">
+      <label>📥 Bulk Import Words (CSV / Excel)</label>
+      <div style="font-size:12px; color:#7a7360; margin-bottom:10px;">
+        Upload a file, or paste rows directly. One word per line, fields separated by <code>|</code> (pipe):<br/>
+        <code>term|meaning|example_sentence|distractors</code><br/>
+        Example: <code>Technology|បច្ចេកវិទ្យា|Technology has changed our lives.|ប្រពៃណី, អារម្មណ៍, រូបិយវត្ថុ</code>
+      </div>
+
+      <label>Upload File (.csv or .txt)</label>
+      <input type="file" id="bulkFileInput" accept=".csv,.txt" onchange="handleBulkFile(event)" />
+
+      <label>Or Paste Rows Here</label>
+      <textarea id="bulkText" style="min-height:120px;" placeholder="Technology|បច្ចេកវិទ្យា|Technology has changed our lives.|ប្រពៃណី, អារម្មណ៍, រូបិយវត្ថុ"></textarea>
+
+      <button onclick="parseBulkImport()">📥 Preview Import</button>
+      <div class="msg hidden" id="bulkMsg"></div>
+
+      <div id="bulkResults"></div>
+    </div>
+
+    <div class="card">
       <label>Add Word Manually</label>
       <select id="lessonSelect" style="width:100%; padding:10px; border:1px solid var(--line); border-radius:6px; font-family:inherit;"></select>
 
@@ -297,6 +317,101 @@
     showMsg("aiMsg", `Saved ${savedCount} word(s) to the lesson!`, true);
     document.getElementById("aiResults").innerHTML = "";
     document.getElementById("aiParagraph").value = "";
+    await loadLessons();
+  }
+
+  function handleBulkFile(event){
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => { document.getElementById("bulkText").value = e.target.result; };
+    reader.readAsText(file);
+  }
+
+  function parseBulkImport(){
+    const raw = document.getElementById("bulkText").value.trim();
+    if (!raw) { showMsg("bulkMsg", "Paste some rows or upload a file first.", false); return; }
+
+    const lines = raw.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+    const words = [];
+    const skipped = [];
+
+    for (const line of lines) {
+      const parts = line.split("|").map(p => p.trim());
+      const [term, meaning, example_sentence, distractors] = parts;
+      if (!term || !meaning) { skipped.push(line); continue; }
+      words.push({
+        term,
+        meaning,
+        example_sentence: example_sentence || "",
+        distractors: distractors || "",
+      });
+    }
+
+    if (skipped.length > 0) {
+      showMsg("bulkMsg", `Parsed ${words.length} word(s). Skipped ${skipped.length} row(s) missing term/meaning.`, words.length > 0);
+    } else {
+      showMsg("bulkMsg", `Parsed ${words.length} word(s).`, true);
+    }
+
+    renderBulkResults(words);
+  }
+
+  function renderBulkResults(words){
+    const resultsBox = document.getElementById("bulkResults");
+    if (words.length === 0) {
+      resultsBox.innerHTML = "";
+      return;
+    }
+
+    resultsBox.innerHTML = `
+      <div style="font-size:12px; color:#7a7360; margin:14px 0 4px;">
+        Review below, uncheck any you don't want, then save to a lesson:
+      </div>
+      <div id="bulkWordList"></div>
+      <label>Save selected words to</label>
+      <select id="bulkTargetLesson">${document.getElementById("lessonSelect").innerHTML}</select>
+      <button onclick="saveSelectedBulkWords()">Save Selected Words</button>
+    `;
+
+    const listEl = document.getElementById("bulkWordList");
+    listEl.innerHTML = words.map((w, i) => `
+      <div class="ai-word">
+        <input type="checkbox" checked data-idx="${i}" class="bulk-check" />
+        <div class="ai-word-body">
+          <div class="ai-word-term">${w.term}</div>
+          <div class="ai-word-meaning">${w.meaning}</div>
+          <div class="ai-word-example">${w.example_sentence || "(no example)"}</div>
+          <div class="ai-word-distractors">Wrong choices: ${w.distractors || "(none)"}</div>
+        </div>
+      </div>
+    `).join("");
+
+    window._bulkImportWords = words;
+  }
+
+  async function saveSelectedBulkWords(){
+    const lessonId = document.getElementById("bulkTargetLesson").value;
+    if(!lessonId){ showMsg("bulkMsg", "Create a lesson first.", false); return; }
+
+    const checks = document.querySelectorAll(".bulk-check:checked");
+    const selected = Array.from(checks).map(c => window._bulkImportWords[parseInt(c.dataset.idx)]);
+
+    if (selected.length === 0) { showMsg("bulkMsg", "Select at least one word.", false); return; }
+
+    let savedCount = 0;
+    for (const w of selected) {
+      await apiFetch(`/admin/lessons/${lessonId}/words`, {
+        method: "POST",
+        body: JSON.stringify(w),
+      });
+      savedCount++;
+    }
+
+    showMsg("bulkMsg", `Saved ${savedCount} word(s) to the lesson!`, true);
+    document.getElementById("bulkResults").innerHTML = "";
+    document.getElementById("bulkText").value = "";
+    document.getElementById("bulkFileInput").value = "";
     await loadLessons();
   }
 

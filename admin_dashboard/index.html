@@ -51,6 +51,18 @@
   .msg.err{background:#fbeae5; color:var(--wrong);}
   .hidden{display:none;}
   .toggle-link{font-size:12px; color:var(--accent); cursor:pointer; text-decoration:underline; margin-top:10px; display:inline-block;}
+  .ai-word{
+    border:1px solid var(--line); border-radius:6px; padding:12px; margin-top:10px;
+    background:#fffdf8; display:flex; gap:10px; align-items:flex-start;
+  }
+  .ai-word input[type="checkbox"]{margin-top:4px;}
+  .ai-word-body{flex:1;}
+  .ai-word-term{font-weight:700; font-size:14px;}
+  .ai-word-meaning{color:#5a5346; font-size:13px;}
+  .ai-word-example{font-size:12px; font-style:italic; color:#9b917a; margin-top:2px;}
+  .ai-word-distractors{font-size:11px; color:#9b917a; margin-top:2px;}
+  .spinner{display:inline-block; animation:spin 1s linear infinite;}
+  @keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
 </style>
 </head>
 <body>
@@ -70,14 +82,31 @@
   <div id="dashboard" class="hidden">
 
     <div class="card">
-      <label>New Lesson Title</label>
+      <label>Create New Lesson</label>
       <input type="text" id="lessonTitle" placeholder="e.g. Unit 4: Technology" />
       <button onclick="createLesson()">+ Create Lesson</button>
       <div class="msg hidden" id="lessonMsg"></div>
     </div>
 
     <div class="card">
-      <label>Add Word to Lesson</label>
+      <label>✨ Generate Vocabulary from a Paragraph (AI)</label>
+      <div style="font-size:12px; color:#7a7360; margin-bottom:10px;">
+        Paste your reading passage below. Claude will suggest words, Khmer meanings,
+        example sentences, and quiz choices for you to review before saving.
+      </div>
+      <textarea id="aiParagraph" style="min-height:120px;" placeholder="Paste your lesson text here..."></textarea>
+
+      <label>Number of words to extract</label>
+      <input type="number" id="aiNumWords" value="10" min="3" max="20" style="width:100px;" />
+
+      <button onclick="generateVocab()" id="generateBtn">✨ Generate Vocabulary</button>
+      <div class="msg hidden" id="aiMsg"></div>
+
+      <div id="aiResults"></div>
+    </div>
+
+    <div class="card">
+      <label>Add Word Manually</label>
       <select id="lessonSelect" style="width:100%; padding:10px; border:1px solid var(--line); border-radius:6px; font-family:inherit;"></select>
 
       <label>Term (English word)</label>
@@ -176,6 +205,99 @@
         `).join("") || "<div style='color:#9b917a; font-size:12px; padding-top:6px;'>No words yet.</div>"}
       </div>
     `).join("");
+  }
+
+  async function generateVocab(){
+    const paragraph = document.getElementById("aiParagraph").value.trim();
+    const numWords = parseInt(document.getElementById("aiNumWords").value) || 10;
+    const btn = document.getElementById("generateBtn");
+    const resultsBox = document.getElementById("aiResults");
+
+    if(!paragraph){ showMsg("aiMsg", "Please paste a paragraph first.", false); return; }
+
+    btn.disabled = true;
+    btn.innerHTML = "⏳ Thinking…";
+    resultsBox.innerHTML = "";
+
+    try {
+      const res = await apiFetch("/admin/generate-vocab", {
+        method: "POST",
+        body: JSON.stringify({ paragraph, num_words: numWords }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        showMsg("aiMsg", err.detail || "Something went wrong.", false);
+        return;
+      }
+      const words = await res.json();
+      renderAiResults(words);
+    } catch(e) {
+      showMsg("aiMsg", "Request failed. Check your connection and try again.", false);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = "✨ Generate Vocabulary";
+    }
+  }
+
+  function renderAiResults(words){
+    const resultsBox = document.getElementById("aiResults");
+    if (words.length === 0) {
+      resultsBox.innerHTML = "<div style='color:#9b917a; font-size:13px; margin-top:10px;'>No words returned. Try a longer paragraph.</div>";
+      return;
+    }
+
+    resultsBox.innerHTML = `
+      <div style="font-size:12px; color:#7a7360; margin:14px 0 4px;">
+        Review below, uncheck any you don't want, then save to a lesson:
+      </div>
+      <div id="aiWordList"></div>
+      <label>Save selected words to</label>
+      <select id="aiTargetLesson">${document.getElementById("lessonSelect").innerHTML}</select>
+      <button onclick="saveSelectedAiWords()">Save Selected Words</button>
+    `;
+
+    const listEl = document.getElementById("aiWordList");
+    listEl.innerHTML = words.map((w, i) => `
+      <div class="ai-word">
+        <input type="checkbox" checked data-idx="${i}" class="ai-check" />
+        <div class="ai-word-body">
+          <div class="ai-word-term">${w.term}</div>
+          <div class="ai-word-meaning">${w.meaning}</div>
+          <div class="ai-word-example">${w.example_sentence}</div>
+          <div class="ai-word-distractors">Wrong choices: ${w.distractors}</div>
+        </div>
+      </div>
+    `).join("");
+
+    // stash the raw data on the window so saveSelectedAiWords can read it back
+    window._aiGeneratedWords = words;
+  }
+
+  async function saveSelectedAiWords(){
+    const lessonId = document.getElementById("aiTargetLesson").value;
+    if(!lessonId){ showMsg("aiMsg", "Create a lesson first.", false); return; }
+
+    const checks = document.querySelectorAll(".ai-check:checked");
+    const selected = Array.from(checks).map(c => window._aiGeneratedWords[parseInt(c.dataset.idx)]);
+
+    if (selected.length === 0) { showMsg("aiMsg", "Select at least one word.", false); return; }
+
+    let savedCount = 0;
+    for (const w of selected) {
+      await apiFetch(`/admin/lessons/${lessonId}/words`, {
+        method: "POST",
+        body: JSON.stringify({
+          term: w.term, meaning: w.meaning,
+          example_sentence: w.example_sentence, distractors: w.distractors,
+        }),
+      });
+      savedCount++;
+    }
+
+    showMsg("aiMsg", `Saved ${savedCount} word(s) to the lesson!`, true);
+    document.getElementById("aiResults").innerHTML = "";
+    document.getElementById("aiParagraph").value = "";
+    await loadLessons();
   }
 
   async function createLesson(){

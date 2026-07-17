@@ -29,6 +29,11 @@ class Settings:
     # Later, replace with proper hashed-password login.
     ADMIN_SECRET_KEY: str = os.getenv("ADMIN_SECRET_KEY", "change-this-secret")
 
+    # Used by the "Generate Vocabulary from Paragraph" feature in the Admin
+    # Dashboard. Get your own key at https://console.anthropic.com
+    # (separate from a claude.ai login -- this is the developer API).
+    ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+
     # Used to sign JWT tokens issued to students after Telegram login.
     JWT_SECRET: str = os.getenv("JWT_SECRET", "change-this-jwt-secret")
     JWT_ALGORITHM: str = "HS256"

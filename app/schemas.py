@@ -96,6 +96,21 @@ class AnswerResult(BaseModel):
     next_review_date: date
 
 
+# ---------- AI Vocabulary Generation ----------
+class VocabGenerateRequest(BaseModel):
+    """What the teacher sends: a paragraph and how many words to extract."""
+    paragraph: str
+    num_words: int = 10
+
+
+class GeneratedWordOut(BaseModel):
+    """One AI-suggested word, shown to the teacher for review before saving."""
+    term: str
+    meaning: str              # in Khmer
+    example_sentence: str     # pulled/adapted from the teacher's paragraph
+    distractors: str          # comma-separated, in Khmer
+
+
 # ---------- Analytics (for the teacher) ----------
 class WordDifficultyOut(BaseModel):
     word_id: int

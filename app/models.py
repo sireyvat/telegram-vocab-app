@@ -27,7 +27,7 @@ from app.database import Base
 
 class Student(Base):
     """One row = one student who has opened the Mini App via Telegram."""
-    __tablename__ = "students"
+    __tablename__ = "vocab_students"
 
     id = Column(Integer, primary_key=True, index=True)
 
@@ -55,7 +55,7 @@ class Lesson(Base):
     Groups vocabulary by class session, so the teacher can tag words
     ("these 10 words belong to Lesson 5, taught on 2026-07-10").
     """
-    __tablename__ = "lessons"
+    __tablename__ = "vocab_lessons"
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)          # e.g. "Unit 3: Travel"
@@ -67,10 +67,10 @@ class Lesson(Base):
 
 class Word(Base):
     """A single vocabulary item entered by the teacher."""
-    __tablename__ = "words"
+    __tablename__ = "vocab_words"
 
     id = Column(Integer, primary_key=True, index=True)
-    lesson_id = Column(Integer, ForeignKey("lessons.id"), nullable=False)
+    lesson_id = Column(Integer, ForeignKey("vocab_lessons.id"), nullable=False)
 
     term = Column(String, nullable=False, index=True)     # the word itself
     meaning = Column(String, nullable=False)               # definition / translation
@@ -98,12 +98,12 @@ class Progress(Base):
     We use a simplified SM-2 algorithm (the same family of algorithm used
     by Anki). See app/srs.py for the logic that updates these fields.
     """
-    __tablename__ = "progress"
+    __tablename__ = "vocab_progress"
     __table_args__ = (UniqueConstraint("student_id", "word_id", name="uq_student_word"),)
 
     id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
-    word_id = Column(Integer, ForeignKey("words.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("vocab_students.id"), nullable=False)
+    word_id = Column(Integer, ForeignKey("vocab_words.id"), nullable=False)
 
     # --- SM-2 style SRS fields ---
     ease_factor = Column(Float, default=2.5)     # how "easy" this word is for this student
@@ -127,11 +127,11 @@ class Attempt(Base):
     This is what powers the teacher's analytics dashboard
     ("which words are hardest for the class overall?").
     """
-    __tablename__ = "attempts"
+    __tablename__ = "vocab_attempts"
 
     id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
-    word_id = Column(Integer, ForeignKey("words.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("vocab_students.id"), nullable=False)
+    word_id = Column(Integer, ForeignKey("vocab_words.id"), nullable=False)
 
     question_type = Column(String, nullable=False)   # "flashcard" | "multiple_choice" | "fill_blank"
     is_correct = Column(Boolean, nullable=False)

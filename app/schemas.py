@@ -82,9 +82,13 @@ class AnswerSubmit(BaseModel):
     """What the frontend sends after a student answers a question."""
     student_telegram_id: str
     word_id: int
-    question_type: str          # "flashcard" | "multiple_choice" | "fill_blank"
+    question_type: str          # "flashcard" | "multiple_choice" | "fill_blank" | "flashcard_self_rate"
     is_correct: bool
     response_time_ms: Optional[int] = None
+    # Optional: used only by self-rated flashcard mode (question_type == "flashcard_self_rate").
+    # 0=Again(ភ្លេច) 1=Hard(ពិបាក) 2=Good(មធ្យម) 3=Easy(ងាយ)
+    # When present, this drives a richer SRS update than plain is_correct.
+    quality: Optional[int] = None
 
 
 class AnswerResult(BaseModel):

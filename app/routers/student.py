@@ -93,11 +93,23 @@ def submit_answer(answer: schemas.AnswerSubmit, db: Session = Depends(get_db)):
     db.add(attempt)
 
     # 2. Update this student's SRS state for this specific word.
+    #    Use the richer self-rated algorithm if the frontend sent a quality
+    #    rating (flashcard mode); otherwise fall back to the simple
+    #    correct/incorrect algorithm (quiz mode).
     progress = crud.get_or_create_progress(db, student.id, word.id)
-    srs.update_progress_after_answer(progress, answer.is_correct)
+    if answer.quality is not None:
+        srs.update_progress_self_rated(progress, answer.quality)
+    else:
+        srs.update_progress_after_answer(progress, answer.is_correct)
 
     # 3. Gamification: XP + streak.
-    xp_earned = 10 if answer.is_correct else 2  # small XP even for wrong answers = effort counts
+    #    Self-rated mode gives graded XP (Easy > Good > Hard > Again) so
+    #    honest self-assessment feels rewarded, not punished.
+    if answer.quality is not None:
+        xp_by_quality = {0: 2, 1: 5, 2: 10, 3: 15}
+        xp_earned = xp_by_quality.get(answer.quality, 5)
+    else:
+        xp_earned = 10 if answer.is_correct else 2  # small XP even for wrong answers = effort counts
     student.xp += xp_earned
 
     new_streak, is_new_day = srs.calculate_streak(student.last_practice_date, student.current_streak)

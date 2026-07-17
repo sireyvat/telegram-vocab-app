@@ -68,6 +68,66 @@ def update_progress_after_answer(progress: Progress, is_correct: bool) -> Progre
     return progress
 
 
+# Quality levels for self-rated flashcards (like Anki's 4 review buttons)
+QUALITY_AGAIN = 0   # ភ្លេច — forgot completely
+QUALITY_HARD = 1    # ពិបាក — remembered, but it was a struggle
+QUALITY_GOOD = 2    # មធ្យម — remembered correctly with normal effort
+QUALITY_EASY = 3    # ងាយ — remembered instantly, too easy
+
+
+def update_progress_self_rated(progress: Progress, quality: int) -> Progress:
+    """
+    A richer alternative to update_progress_after_answer(), used by the
+    self-rated flashcard mode where the student judges their OWN recall
+    quality (Again / Hard / Good / Easy) instead of just right/wrong.
+
+    (Khmer: នេះជាកំណែពង្រីកនៃ SRS algorithm ដែលប្រើនៅពេលសិស្សវាយតម្លៃខ្លួនឯង
+    ជំនួសការឆ្លើយសំណួរពហុជម្រើសធម្មតា — ផ្តល់ភាពត្រឹមត្រូវខ្ពស់ជាងចំពោះការគណនា
+    ថាតើគួររំលឹកពាក្យនេះនៅពេលណា)
+
+    This mirrors Anki's default 4-button review, which is a well-tested
+    refinement of the plain SM-2 algorithm.
+    """
+    is_correct = quality > QUALITY_AGAIN
+
+    if quality == QUALITY_AGAIN:
+        progress.incorrect_count += 1
+        progress.repetitions = 0
+        progress.interval_days = 1
+        progress.ease_factor = max(progress.ease_factor - 0.2, 1.3)
+
+    else:
+        progress.correct_count += 1
+        progress.repetitions += 1
+
+        # Same base growth curve as the binary version: 1 day -> 3 days -> ease-based growth
+        if progress.repetitions == 1:
+            base_interval = 1
+        elif progress.repetitions == 2:
+            base_interval = 3
+        else:
+            base_interval = round(progress.interval_days * progress.ease_factor)
+
+        if quality == QUALITY_HARD:
+            # Remembered, but it was effortful -> grow the interval more cautiously
+            progress.interval_days = max(1, round(base_interval * 0.8))
+            progress.ease_factor = max(progress.ease_factor - 0.15, 1.3)
+
+        elif quality == QUALITY_GOOD:
+            # Normal recall -> use the standard growth curve as-is
+            progress.interval_days = max(1, base_interval)
+
+        elif quality == QUALITY_EASY:
+            # Too easy -> push the next review out further, word is well-learned
+            progress.interval_days = max(1, round(base_interval * 1.3))
+            progress.ease_factor = min(progress.ease_factor + 0.15, 3.0)
+
+    progress.last_result_correct = is_correct
+    progress.next_review_date = date.today() + timedelta(days=progress.interval_days)
+
+    return progress
+
+
 def calculate_streak(last_practice_date, current_streak: int) -> tuple[int, bool]:
     """
     Decide the student's new streak count based on when they last practiced.

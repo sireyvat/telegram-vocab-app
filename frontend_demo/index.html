@@ -47,6 +47,23 @@
   .meaning{margin-top:10px; font-size:15px; color:#5a5346; display:none;}
   .example{margin-top:14px; font-size:12px; font-style:italic; color:#7a7360;}
   .hint{margin-top:18px; font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:#9b917a; cursor:pointer;}
+  .meaning-reveal{margin-top:12px; font-size:18px; font-weight:700; color:var(--accent);}
+  .show-answer-btn{
+    margin-top:20px; background:var(--ink); color:var(--paper); border:none;
+    padding:12px 20px; border-radius:6px; font-family:inherit; font-size:13px;
+    cursor:pointer; text-transform:uppercase; letter-spacing:.05em; width:100%;
+  }
+  .show-answer-btn:hover{opacity:.85;}
+  .rating-row{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:18px;}
+  .rating-btn{
+    padding:10px 4px; border-radius:6px; border:1.5px solid var(--line); cursor:pointer;
+    font-family:inherit; font-size:11px; text-align:center; background:#fffdf8; line-height:1.5;
+  }
+  .rating-btn:hover{opacity:.75;}
+  .rating-again{border-color:var(--wrong); color:var(--wrong);}
+  .rating-hard{border-color:#c98a3a; color:#c98a3a;}
+  .rating-good{border-color:var(--accent); color:var(--accent);}
+  .rating-easy{border-color:var(--correct); color:var(--correct);}
   .options{display:grid; gap:10px; margin-top:18px;}
   .opt{
     background:#fffdf8; border:1px solid var(--line); border-radius:6px; padding:12px 14px;
@@ -71,8 +88,17 @@
       <div class="term" id="termText">Loading…</div>
       <button class="speak-btn" id="speakBtn" onclick="speakCurrentWord()" title="Listen">🔊</button>
     </div>
-    <div class="example" id="exampleText"></div>
-    <div class="options" id="optionsBox"></div>
+    <div class="example" id="exampleText" style="display:none;"></div>
+    <div class="meaning-reveal" id="meaningText" style="display:none;"></div>
+
+    <button class="show-answer-btn" id="showAnswerBtn" onclick="revealAnswer()">🔍 Show Answer</button>
+
+    <div class="rating-row" id="ratingRow" style="display:none;">
+      <button class="rating-btn rating-again" onclick="rateAnswer(0)">😵<br/>ភ្លេច</button>
+      <button class="rating-btn rating-hard" onclick="rateAnswer(1)">😓<br/>ពិបាក</button>
+      <button class="rating-btn rating-good" onclick="rateAnswer(2)">🙂<br/>មធ្យម</button>
+      <button class="rating-btn rating-easy" onclick="rateAnswer(3)">😎<br/>ងាយ</button>
+    </div>
   </div>
 
   <div class="footer">
@@ -140,34 +166,43 @@
   }
 
   function renderCard() {
-    const box = document.getElementById("optionsBox");
-    box.innerHTML = "";
+    document.getElementById("exampleText").style.display = "none";
+    document.getElementById("meaningText").style.display = "none";
+    document.getElementById("showAnswerBtn").style.display = "block";
+    document.getElementById("ratingRow").style.display = "none";
+
     if (current >= session.length) {
       document.getElementById("termText").textContent = "Done for today! 🎉";
       document.getElementById("exampleText").textContent = "Come back tomorrow to keep your streak.";
+      document.getElementById("exampleText").style.display = "block";
       document.getElementById("progressText").textContent = `${session.length} / ${session.length}`;
       document.getElementById("speakBtn").disabled = true;
+      document.getElementById("showAnswerBtn").style.display = "none";
       return;
     }
     document.getElementById("speakBtn").disabled = false;
     const word = session[current];
     document.getElementById("termText").textContent = word.term;
-    document.getElementById("exampleText").textContent = word.example_sentence || "";
     document.getElementById("progressText").textContent = `${current + 1} / ${session.length}`;
-
-    word.options.forEach(opt => {
-      const btn = document.createElement("button");
-      btn.className = "opt";
-      btn.textContent = opt;
-      btn.onclick = () => selectAnswer(btn, opt, word);
-      box.appendChild(btn);
-    });
   }
 
-  async function selectAnswer(btn, chosen, word) {
-    const isCorrect = chosen === word.meaning;
-    btn.classList.add(isCorrect ? "correct" : "wrong");
-    document.querySelectorAll(".opt").forEach(b => b.disabled = true);
+  function revealAnswer() {
+    const word = session[current];
+    if (!word) return;
+
+    document.getElementById("exampleText").textContent = word.example_sentence || "";
+    document.getElementById("exampleText").style.display = "block";
+    document.getElementById("meaningText").textContent = word.meaning;
+    document.getElementById("meaningText").style.display = "block";
+    document.getElementById("showAnswerBtn").style.display = "none";
+    document.getElementById("ratingRow").style.display = "grid";
+  }
+
+  async function rateAnswer(quality) {
+    const word = session[current];
+    if (!word) return;
+
+    document.querySelectorAll(".rating-btn").forEach(b => b.disabled = true);
 
     const res = await fetch(`${API_BASE}/student/answer`, {
       method: "POST",
@@ -175,15 +210,18 @@
       body: JSON.stringify({
         student_telegram_id: telegramId,
         word_id: word.word_id,
-        question_type: "multiple_choice",
-        is_correct: isCorrect,
+        question_type: "flashcard_self_rate",
+        is_correct: quality > 0,
+        quality: quality,
       }),
     });
     const result = await res.json();
     document.getElementById("xpBadge").textContent = `${result.new_xp_total} XP`;
     document.getElementById("streakText").textContent = result.current_streak;
 
-    setTimeout(() => { current += 1; renderCard(); }, 900);
+    document.querySelectorAll(".rating-btn").forEach(b => b.disabled = false);
+    current += 1;
+    renderCard();
   }
 
   login().then(loadSession);

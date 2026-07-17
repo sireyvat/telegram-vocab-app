@@ -99,7 +99,7 @@ class Progress(Base):
     by Anki). See app/srs.py for the logic that updates these fields.
     """
     __tablename__ = "vocab_progress"
-    __table_args__ = (UniqueConstraint("student_id", "word_id", name="uq_student_word"),)
+    __table_args__ = (UniqueConstraint("student_id", "word_id", name="uq_vocab_student_word"),)
 
     id = Column(Integer, primary_key=True, index=True)
     student_id = Column(Integer, ForeignKey("vocab_students.id"), nullable=False)

@@ -109,6 +109,29 @@ def get_due_words_for_student(db: Session, student_id: int, limit: int = 10):
     return due_words
 
 
+# ---------- Leaderboard ----------
+def get_leaderboard(db: Session, limit: int = 10):
+    """
+    Top students by XP, for the class leaderboard.
+    (Khmer: តារាងចំណាត់ថ្នាក់សិស្សតាម XP)
+    """
+    students = (
+        db.query(models.Student)
+        .order_by(models.Student.xp.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        schemas.LeaderboardEntryOut(
+            rank=i + 1,
+            first_name=s.first_name or "Student",
+            xp=s.xp,
+            current_streak=s.current_streak,
+        )
+        for i, s in enumerate(students)
+    ]
+
+
 # ---------- Analytics (Teacher) ----------
 def get_hardest_words(db: Session, limit: int = 20):
     """

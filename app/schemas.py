@@ -66,6 +66,13 @@ class StudentOut(BaseModel):
     longest_streak: int
 
 
+class LeaderboardEntryOut(BaseModel):
+    rank: int
+    first_name: Optional[str] = "Student"
+    xp: int
+    current_streak: int
+
+
 # ---------- Quiz / Practice flow ----------
 class ReviewWordOut(BaseModel):
     """A word sent to the student for practice, with its due date info."""

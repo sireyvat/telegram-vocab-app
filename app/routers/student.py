@@ -65,6 +65,15 @@ def get_review_session(telegram_id: str, limit: int = 10, db: Session = Depends(
     return session
 
 
+@router.get("/leaderboard", response_model=list[schemas.LeaderboardEntryOut])
+def get_leaderboard(limit: int = 10, db: Session = Depends(get_db)):
+    """
+    Public endpoint (no login needed) showing the top students by XP,
+    so the class can see how they rank against each other.
+    """
+    return crud.get_leaderboard(db, limit=limit)
+
+
 @router.post("/answer", response_model=schemas.AnswerResult)
 def submit_answer(answer: schemas.AnswerSubmit, db: Session = Depends(get_db)):
     """
